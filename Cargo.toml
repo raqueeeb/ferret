@@ -1,0 +1,26 @@
+[package]
+name = "ferret"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Local file search engine with a hand-built inverted index"
+
+[dependencies]
+# Storage only. No search library, no query engine, no full-text extension.
+rusqlite = "0.31"
+# Filesystem notifications: inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows.
+notify = "6.1"
+# Directory traversal.
+walkdir = "2"
+# zlib for PDF FlateDecode streams. Pure Rust backend.
+flate2 = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
+[[bin]]
+name = "ferret"
+path = "src/main.rs"
