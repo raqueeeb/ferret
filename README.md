@@ -1,5 +1,7 @@
 # ferret
 
+> 📘 **Case study:** [raqueeb.dev/projects/ferret](https://raqueeb.dev/projects/ferret) — architecture, stack and implementation notes.
+
 A local file search engine. Point it at a folder; it indexes text, code and PDFs, and answers ranked queries in well under a millisecond.
 
 The inverted index is built from scratch — tokenizer, postings codec, BM25, segment merging, crash recovery. SQLite is used as a B-tree and a page cache. There is no Lucene, no Tantivy, and no FTS5 anywhere in this project.
