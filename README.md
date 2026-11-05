@@ -190,7 +190,7 @@ Phrase matching shifts each term's positions by its offset in the phrase and pro
 
 ## Tests
 
-58 tests, `cargo test`. The ones that matter are the properties that only appear once the pieces are assembled:
+61 tests, `cargo test`, run on Linux, macOS and Windows in CI. The ones that matter are the properties that only appear once the pieces are assembled:
 
 - merging preserves result order **and scores to 1e-4**, and shrinks the segment count
 - a 4 KB memtable budget gives the same answers as a 1 MB one
@@ -201,11 +201,15 @@ Phrase matching shifts each term's positions by its offset in the phrase and pro
 - build directories and binary files are excluded; text beside them is not
 - a second crawl re-indexes nothing
 
-Three real bugs surfaced this way and are worth naming, since the point of the exercise is understanding rather than a green checkmark:
+Five real bugs surfaced this way and are worth naming, since the point of the exercise is understanding rather than a green checkmark:
 
 1. **Ranking was inverted.** A stray `.reverse()` on the heap sort put the worst-scoring documents first. Caught by a test asserting a short dense document outranks a long diluted one — precisely what BM25 length normalisation is for.
 2. **A single segment holding tombstones could never be compacted.** `merge_all` bailed at `segments.len() < 2`, so deleted documents' postings were immortal.
 3. **The memtable budget undercounted by 3x.** It charged encoded bytes while `Vec` doubles its capacity, so a 64 MB budget used 229 MB. Charging capacity brought it to 175 MB and made the budget mean something.
+4. **Document keys used the host's path separator.** A file indexed on Windows was stored as `src\main.rs`, so `path:src/main` — written with a forward slash, as the query syntax requires everywhere — matched nothing, and an index could not be moved between machines. The relative path is now normalised to `/` at the four places a path enters the index. Two end-to-end tests had asserted the Unix spelling all along; they had simply never been run anywhere else.
+5. **The build needed a system SQLite that most machines do not have.** `rusqlite` was declared without its `bundled` feature, so a clean checkout failed to link on Windows, and on any Linux box without `libsqlite3-dev`. SQLite is now compiled from source as part of the build, which costs a slower first compile and removes the dependency entirely.
+
+The last two were invisible while the suite only ever ran on one operating system. That is what the CI matrix is for.
 
 ---
 
@@ -282,3 +286,6 @@ cargo build --release
 ./target/release/ferret index /tmp/corpus -v
 ./target/release/ferret bench /tmp/corpus --runs 300
 ```
+
+`cargo build` is all it takes on Linux, macOS and Windows: SQLite is compiled
+from source, so there is no system library to install first.
