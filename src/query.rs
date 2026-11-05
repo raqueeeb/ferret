@@ -90,6 +90,10 @@ pub struct TermPlan {
     pub bytes: usize,
 }
 
+/// The documents a phrase occurs in, and what the phrase contributes to each
+/// one's score.
+type PhraseMatches = (HashSet<i64>, Vec<(i64, f32)>);
+
 #[derive(Debug, Clone)]
 pub struct Hit {
     pub doc: i64,
@@ -145,12 +149,20 @@ pub fn parse(input: &str) -> Query {
             if terms.len() == 1 {
                 query.clauses.push(Clause::Term {
                     text: terms[0].clone(),
-                    occur: if occur == Occur::Should { Occur::Must } else { occur },
+                    occur: if occur == Occur::Should {
+                        Occur::Must
+                    } else {
+                        occur
+                    },
                 });
             } else if !terms.is_empty() {
                 query.clauses.push(Clause::Phrase {
                     terms,
-                    occur: if occur == Occur::Should { Occur::Must } else { occur },
+                    occur: if occur == Occur::Should {
+                        Occur::Must
+                    } else {
+                        occur
+                    },
                 });
             }
             continue;
@@ -179,7 +191,10 @@ pub fn parse(input: &str) -> Query {
         if let Some(stem) = raw.strip_suffix('*') {
             let toks = tokenize::query_tokens(stem);
             if let Some(t) = toks.first() {
-                query.clauses.push(Clause::Prefix { text: t.clone(), occur });
+                query.clauses.push(Clause::Prefix {
+                    text: t.clone(),
+                    occur,
+                });
                 continue;
             }
         }
@@ -258,7 +273,10 @@ impl<'a> Searcher<'a> {
     /// Run `query` and return the top `limit` documents.
     pub fn search(&self, query: &Query, limit: usize) -> Result<(Vec<Hit>, Plan)> {
         let start = Instant::now();
-        let mut plan = Plan { segments: self.segment_count, ..Default::default() };
+        let mut plan = Plan {
+            segments: self.segment_count,
+            ..Default::default()
+        };
 
         let mut scores: HashMap<i64, f32> = HashMap::new();
         let mut required: Option<HashSet<i64>> = None;
@@ -279,7 +297,13 @@ impl<'a> Searcher<'a> {
                         let docs = self.score_term(term, &mut scores, &mut plan, *occur)?;
                         union.extend(docs);
                     }
-                    self.apply_occur(*occur, union, &mut required, &mut excluded, &mut matched_any);
+                    self.apply_occur(
+                        *occur,
+                        union,
+                        &mut required,
+                        &mut excluded,
+                        &mut matched_any,
+                    );
                 }
                 Clause::Phrase { terms, occur } => {
                     let (docs, contribution) = self.match_phrase(terms, &mut plan)?;
@@ -327,13 +351,19 @@ impl<'a> Searcher<'a> {
         ranked.sort();
 
         let mut hits = Vec::with_capacity(ranked.len());
-        let mut stmt = self.conn.prepare_cached("SELECT path FROM docs WHERE id = ?1")?;
+        let mut stmt = self
+            .conn
+            .prepare_cached("SELECT path FROM docs WHERE id = ?1")?;
         for r in ranked {
             let path: String = match stmt.query_row([r.doc], |row| row.get(0)) {
                 Ok(p) => p,
                 Err(_) => continue,
             };
-            hits.push(Hit { doc: r.doc, path, score: -r.score });
+            hits.push(Hit {
+                doc: r.doc,
+                path,
+                score: -r.score,
+            });
         }
 
         plan.search_us = start.elapsed().as_micros();
@@ -372,7 +402,13 @@ impl<'a> Searcher<'a> {
         let lists = self.postings_for(term)?;
         let df: u64 = lists.iter().map(|(df, _)| df).sum();
         if df == 0 {
-            plan.terms.push(TermPlan { term: term.to_string(), df: 0, idf: 0.0, segments: 0, bytes: 0 });
+            plan.terms.push(TermPlan {
+                term: term.to_string(),
+                df: 0,
+                idf: 0.0,
+                segments: 0,
+                bytes: 0,
+            });
             return Ok(HashSet::new());
         }
         let idf = self.idf(df);
@@ -416,7 +452,10 @@ impl<'a> Searcher<'a> {
     /// from `the`. After the shift, a phrase occurrence is exactly a position
     /// value present in every term's set, which turns matching into repeated
     /// sorted-list intersection.
-    fn match_phrase(&self, terms: &[String], plan: &mut Plan) -> Result<(HashSet<i64>, Vec<(i64, f32)>)> {
+    ///
+    /// Returns the documents the phrase occurs in, and the per-document score
+    /// contribution of the phrase.
+    fn match_phrase(&self, terms: &[String], plan: &mut Plan) -> Result<PhraseMatches> {
         let mut loaded: Vec<(usize, u64, Vec<Vec<u8>>)> = Vec::new();
         for (offset, term) in terms.iter().enumerate() {
             let lists = self.postings_for(term)?;
@@ -489,7 +528,10 @@ impl<'a> Searcher<'a> {
                 let tf = hits.len() as f32;
                 // Phrases are worth more than the sum of their words; the
                 // multiplier is a tuning choice, not a result from the paper.
-                (doc, idf * (tf * (K1 + 1.0)) / (tf + K1) * terms.len() as f32)
+                (
+                    doc,
+                    idf * (tf * (K1 + 1.0)) / (tf + K1) * terms.len() as f32,
+                )
             })
             .collect();
         Ok((docs, contribution))
@@ -595,9 +637,17 @@ mod tests {
             .clauses
             .iter()
             .map(|c| match c {
-                Clause::Term { occur: Occur::Should, .. } => "should",
-                Clause::Term { occur: Occur::Must, .. } => "must",
-                Clause::Term { occur: Occur::MustNot, .. } => "not",
+                Clause::Term {
+                    occur: Occur::Should,
+                    ..
+                } => "should",
+                Clause::Term {
+                    occur: Occur::Must, ..
+                } => "must",
+                Clause::Term {
+                    occur: Occur::MustNot,
+                    ..
+                } => "not",
                 Clause::Phrase { .. } => "phrase",
                 Clause::Prefix { .. } => "prefix",
             })
@@ -608,7 +658,13 @@ mod tests {
     #[test]
     fn single_word_quotes_become_a_required_term() {
         let q = parse("\"solo\"");
-        assert!(matches!(&q.clauses[0], Clause::Term { occur: Occur::Must, .. }));
+        assert!(matches!(
+            &q.clauses[0],
+            Clause::Term {
+                occur: Occur::Must,
+                ..
+            }
+        ));
     }
 
     #[test]
