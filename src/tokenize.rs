@@ -67,7 +67,10 @@ pub fn tokenize<F: FnMut(&str, u32)>(text: &str, mut sink: F) {
 pub fn tokens(text: &str) -> Vec<Token> {
     let mut out = Vec::new();
     tokenize(text, |t, p| {
-        out.push(Token { text: t.to_string(), pos: p })
+        out.push(Token {
+            text: t.to_string(),
+            pos: p,
+        })
     });
     out
 }
@@ -112,7 +115,9 @@ fn split_identifier(s: &str) -> Vec<&str> {
                 true
             } else if prev.is_uppercase() && cur.is_uppercase() {
                 // HTTPServer: break before the S, which needs one char lookahead
-                bytes.get(i + 1).map_or(false, |(_, next)| next.is_lowercase())
+                bytes
+                    .get(i + 1)
+                    .is_some_and(|(_, next)| next.is_lowercase())
             } else if prev.is_numeric() != cur.is_numeric() {
                 // utf8Decode / decode2
                 cur.is_alphabetic() && prev.is_numeric()
@@ -140,7 +145,10 @@ mod tests {
 
     #[test]
     fn splits_plain_prose() {
-        assert_eq!(texts("The quick, brown fox!"), vec!["the", "quick", "brown", "fox"]);
+        assert_eq!(
+            texts("The quick, brown fox!"),
+            vec!["the", "quick", "brown", "fox"]
+        );
     }
 
     #[test]
@@ -188,6 +196,9 @@ mod tests {
 
     #[test]
     fn query_side_keeps_compounds_whole() {
-        assert_eq!(query_tokens("HttpRequest timeout"), vec!["httprequest", "timeout"]);
+        assert_eq!(
+            query_tokens("HttpRequest timeout"),
+            vec!["httprequest", "timeout"]
+        );
     }
 }
