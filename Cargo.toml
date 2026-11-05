@@ -7,7 +7,7 @@ description = "Local file search engine with a hand-built inverted index"
 
 [dependencies]
 # Storage only. No search library, no query engine, no full-text extension.
-rusqlite = "0.31"
+rusqlite = { version = "0.31", features = ["bundled"] }
 # Filesystem notifications: inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows.
 notify = "6.1"
 # Directory traversal.
