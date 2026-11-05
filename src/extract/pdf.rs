@@ -84,7 +84,10 @@ fn find_streams(bytes: &[u8]) -> Vec<RawStream<'_>> {
             data_end -= 1;
         }
         if data_end > start {
-            streams.push(RawStream { dict, data: &bytes[start..data_end] });
+            streams.push(RawStream {
+                dict,
+                data: &bytes[start..data_end],
+            });
         }
         i = end + 9;
     }
@@ -157,7 +160,7 @@ fn extract_text_ops(data: &[u8], out: &mut String) {
                         // TJ kerning is in thousandths of an em; negative
                         // values move the pen forward. Anything past a third
                         // of an em is a word gap in practice.
-                        if v <= -100.0 && operands.last().map_or(false, |s| s != " ") {
+                        if v <= -100.0 && operands.last().is_some_and(|s| s != " ") {
                             operands.push(" ".to_string());
                         }
                     }
@@ -299,9 +302,7 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() || haystack.len() < needle.len() {
         return None;
     }
-    haystack
-        .windows(needle.len())
-        .position(|w| w == needle)
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
