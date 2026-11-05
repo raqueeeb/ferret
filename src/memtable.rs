@@ -193,7 +193,10 @@ mod tests {
         // the process uses several times the memory it was asked to.
         let mut m = MemTable::new(1 << 30);
         for i in 1..500 {
-            m.add_document(i, "alpha beta gamma delta epsilon zeta eta theta iota kappa");
+            m.add_document(
+                i,
+                "alpha beta gamma delta epsilon zeta eta theta iota kappa",
+            );
         }
         let charged = m.bytes();
         let actual = m.allocated_bytes();
@@ -203,7 +206,10 @@ mod tests {
         );
         // ...and must not overcount so wildly that flushes happen far too
         // early, which would fragment the index into tiny segments.
-        assert!(charged < actual * 3, "charged {charged} vs allocated {actual}");
+        assert!(
+            charged < actual * 3,
+            "charged {charged} vs allocated {actual}"
+        );
     }
 
     #[test]

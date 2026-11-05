@@ -234,7 +234,11 @@ impl Store {
 
     pub fn avg_doc_len(&self) -> Result<f32> {
         let (n, t) = self.corpus_stats()?;
-        Ok(if n == 0 { 1.0 } else { (t as f32 / n as f32).max(1.0) })
+        Ok(if n == 0 {
+            1.0
+        } else {
+            (t as f32 / n as f32).max(1.0)
+        })
     }
 
     // -- documents ---------------------------------------------------------
@@ -315,7 +319,11 @@ impl Store {
             .conn
             .prepare("SELECT id, len, deleted FROM docs WHERE id > ?1")?;
         let rows = stmt.query_map([durable], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)?,
+            ))
         })?;
 
         let mut lost = 0u64;
@@ -330,8 +338,10 @@ impl Store {
             }
         }
         if lost > 0 {
-            self.conn
-                .execute("UPDATE docs SET deleted = 1 WHERE id > ?1 AND deleted = 0", [durable])?;
+            self.conn.execute(
+                "UPDATE docs SET deleted = 1 WHERE id > ?1 AND deleted = 0",
+                [durable],
+            )?;
             self.bump_corpus(-docs, -tokens)?;
         }
         Ok(lost)
@@ -361,7 +371,9 @@ impl Store {
 
     /// Drop tombstone rows whose postings are gone. Called after a full merge.
     pub fn purge_tombstones(&self) -> Result<usize> {
-        Ok(self.conn.execute("DELETE FROM docs WHERE deleted = 1", [])?)
+        Ok(self
+            .conn
+            .execute("DELETE FROM docs WHERE deleted = 1", [])?)
     }
 
     /// Every live path, for detecting deletions during a rescan.
@@ -370,7 +382,10 @@ impl Store {
             .conn
             .prepare("SELECT path, mtime, size FROM docs WHERE deleted = 0")?;
         let rows = stmt.query_map([], |r| {
-            Ok((r.get::<_, String>(0)?, (r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)))
+            Ok((
+                r.get::<_, String>(0)?,
+                (r.get::<_, i64>(1)?, r.get::<_, i64>(2)?),
+            ))
         })?;
         let mut map = std::collections::HashMap::new();
         for row in rows {
@@ -431,8 +446,10 @@ impl Store {
 
     pub fn drop_segments(&self, ids: &[i64]) -> Result<()> {
         for id in ids {
-            self.conn.execute("DELETE FROM terms WHERE seg = ?1", [id])?;
-            self.conn.execute("DELETE FROM segments WHERE id = ?1", [id])?;
+            self.conn
+                .execute("DELETE FROM terms WHERE seg = ?1", [id])?;
+            self.conn
+                .execute("DELETE FROM segments WHERE id = ?1", [id])?;
         }
         Ok(())
     }

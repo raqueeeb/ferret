@@ -15,7 +15,12 @@ static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 fn temp_dir(name: &str) -> PathBuf {
     let id = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let dir = std::env::temp_dir().join(format!("ferret-crash-{}-{}-{}", name, std::process::id(), id));
+    let dir = std::env::temp_dir().join(format!(
+        "ferret-crash-{}-{}-{}",
+        name,
+        std::process::id(),
+        id
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -30,14 +35,23 @@ fn found(store: &Store, q: &str) -> usize {
 fn documents_lost_before_a_flush_are_reindexed_not_skipped() {
     let dir = temp_dir("watermark");
     for i in 0..30 {
-        std::fs::write(dir.join(format!("f{i}.txt")), format!("searchable content {i}")).unwrap();
+        std::fs::write(
+            dir.join(format!("f{i}.txt")),
+            format!("searchable content {i}"),
+        )
+        .unwrap();
     }
 
     // Index without ever flushing: the catalogue is written, the postings are
     // not. Dropping the indexer here is the same thing a kill -9 does.
     {
         let store = Store::open(&dir).unwrap();
-        let opts = Options { budget: 1 << 30, threads: 1, auto_merge: false, ..Default::default() };
+        let opts = Options {
+            budget: 1 << 30,
+            threads: 1,
+            auto_merge: false,
+            ..Default::default()
+        };
         let mut indexer = Indexer::new(&store, opts);
         indexer.crawl().unwrap();
         // deliberately no finish()/flush()
@@ -47,7 +61,10 @@ fn documents_lost_before_a_flush_are_reindexed_not_skipped() {
             .conn
             .query_row("SELECT COUNT(*) FROM docs", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(catalogued, 30, "the catalogue should have recorded the files");
+        assert_eq!(
+            catalogued, 30,
+            "the catalogue should have recorded the files"
+        );
         assert_eq!(found(&store, "searchable"), 0, "no postings were flushed");
     }
 
@@ -59,14 +76,25 @@ fn documents_lost_before_a_flush_are_reindexed_not_skipped() {
     // write are still reachable by the deletion filter and the merge.
     let dead: i64 = store
         .conn
-        .query_row("SELECT COUNT(*) FROM docs WHERE deleted = 1", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM docs WHERE deleted = 1", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(dead, 30);
 
-    let mut indexer = Indexer::new(&store, Options { threads: 1, ..Default::default() });
+    let mut indexer = Indexer::new(
+        &store,
+        Options {
+            threads: 1,
+            ..Default::default()
+        },
+    );
     indexer.crawl().unwrap();
     indexer.finish().unwrap();
-    assert_eq!(indexer.stats.indexed, 30, "files must be re-read, not treated as unchanged");
+    assert_eq!(
+        indexer.stats.indexed, 30,
+        "files must be re-read, not treated as unchanged"
+    );
     assert_eq!(found(&store, "searchable"), 30);
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -83,7 +111,12 @@ fn a_flushed_prefix_survives_and_is_not_redone() {
         let store = Store::open(&dir).unwrap();
         let mut indexer = Indexer::new(
             &store,
-            Options { budget: 1 << 30, threads: 1, auto_merge: false, ..Default::default() },
+            Options {
+                budget: 1 << 30,
+                threads: 1,
+                auto_merge: false,
+                ..Default::default()
+            },
         );
         indexer.crawl().unwrap();
         indexer.flush().unwrap(); // everything is durable now
@@ -91,10 +124,20 @@ fn a_flushed_prefix_survives_and_is_not_redone() {
     }
 
     let store = Store::open(&dir).unwrap();
-    assert_eq!(store.recover().unwrap(), 0, "nothing should be discarded after a clean flush");
+    assert_eq!(
+        store.recover().unwrap(),
+        0,
+        "nothing should be discarded after a clean flush"
+    );
     assert_eq!(found(&store, "durable"), 40);
 
-    let mut indexer = Indexer::new(&store, Options { threads: 1, ..Default::default() });
+    let mut indexer = Indexer::new(
+        &store,
+        Options {
+            threads: 1,
+            ..Default::default()
+        },
+    );
     indexer.crawl().unwrap();
     assert_eq!(indexer.stats.indexed, 0);
     assert_eq!(indexer.stats.unchanged, 40);
@@ -113,7 +156,12 @@ fn corpus_statistics_stay_consistent_after_recovery() {
         let store = Store::open(&dir).unwrap();
         let mut indexer = Indexer::new(
             &store,
-            Options { budget: 1 << 30, threads: 1, auto_merge: false, ..Default::default() },
+            Options {
+                budget: 1 << 30,
+                threads: 1,
+                auto_merge: false,
+                ..Default::default()
+            },
         );
         indexer.crawl().unwrap();
         std::mem::forget(indexer);

@@ -20,7 +20,12 @@ struct TempCorpus(PathBuf);
 impl TempCorpus {
     fn new(name: &str) -> TempCorpus {
         let id = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!("ferret-test-{}-{}-{}", name, std::process::id(), id));
+        let dir = std::env::temp_dir().join(format!(
+            "ferret-test-{}-{}-{}",
+            name,
+            std::process::id(),
+            id
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         TempCorpus(dir)
@@ -51,7 +56,12 @@ impl Drop for TempCorpus {
 
 fn build(corpus: &TempCorpus, budget: usize) -> Store {
     let store = Store::open(corpus.path()).unwrap();
-    let opts = Options { budget, threads: 2, auto_merge: false, ..Default::default() };
+    let opts = Options {
+        budget,
+        threads: 2,
+        auto_merge: false,
+        ..Default::default()
+    };
     let mut indexer = Indexer::new(&store, opts);
     indexer.crawl().unwrap();
     indexer.finish().unwrap();
@@ -81,11 +91,17 @@ fn finds_a_document_by_a_word_it_contains() {
 fn phrase_queries_respect_word_order() {
     let c = TempCorpus::new("phrase");
     c.write("ordered.txt", "a memory bounded merge is the goal");
-    c.write("scrambled.txt", "merge bounded memory appear here but not adjacent");
+    c.write(
+        "scrambled.txt",
+        "merge bounded memory appear here but not adjacent",
+    );
     c.write("split.txt", "memory is bounded and then we merge");
     let store = build(&c, 1 << 20);
 
-    assert_eq!(hits(&store, "\"memory bounded merge\""), vec!["ordered.txt"]);
+    assert_eq!(
+        hits(&store, "\"memory bounded merge\""),
+        vec!["ordered.txt"]
+    );
     // The bare terms match all three.
     assert_eq!(hits(&store, "memory bounded merge").len(), 3);
 }
@@ -99,7 +115,10 @@ fn bm25_prefers_denser_and_shorter_documents() {
     let store = build(&c, 1 << 20);
 
     let ranked = hits(&store, "postings");
-    assert_eq!(ranked[0], "dense.txt", "length normalisation should favour the short document");
+    assert_eq!(
+        ranked[0], "dense.txt",
+        "length normalisation should favour the short document"
+    );
     assert_eq!(ranked.len(), 2);
 }
 
@@ -168,7 +187,10 @@ fn reindexing_a_changed_file_retires_its_old_terms() {
     c.write("notes.txt", "replacement vocabulary entirely different now");
     let store = build(&c, 1 << 20);
 
-    assert!(hits(&store, "original").is_empty(), "stale posting survived");
+    assert!(
+        hits(&store, "original").is_empty(),
+        "stale posting survived"
+    );
     assert_eq!(hits(&store, "replacement"), vec!["notes.txt"]);
     let (docs, _) = store.corpus_stats().unwrap();
     assert_eq!(docs, 1, "re-indexing must not double-count the document");
@@ -192,7 +214,10 @@ fn deleting_a_file_removes_it_from_results() {
 fn a_small_budget_produces_many_segments_and_identical_answers() {
     let c = TempCorpus::new("segments");
     for i in 0..60 {
-        c.write(&format!("f{i}.txt"), &format!("common term document number {i} unique{i}"));
+        c.write(
+            &format!("f{i}.txt"),
+            &format!("common term document number {i} unique{i}"),
+        );
     }
 
     // 4KB budget forces repeated flushes mid-crawl.
@@ -209,21 +234,25 @@ fn a_small_budget_produces_many_segments_and_identical_answers() {
 fn merging_preserves_results_and_shrinks_the_segment_count() {
     let c = TempCorpus::new("merge");
     for i in 0..80 {
-        c.write(&format!("f{i}.txt"), &format!("shared vocabulary term unique{i} padding padding"));
+        c.write(
+            &format!("f{i}.txt"),
+            &format!("shared vocabulary term unique{i} padding padding"),
+        );
     }
     let store = build(&c, 4096);
 
     let searcher = Searcher::new(&store).unwrap();
-    let (before, _) = searcher
-        .search(&query::parse("shared"), 100)
-        .unwrap();
+    let (before, _) = searcher.search(&query::parse("shared"), 100).unwrap();
     let before: Vec<(String, f32)> = before.into_iter().map(|h| (h.path, h.score)).collect();
     let segments_before = store.segments().unwrap().len();
     drop(searcher);
 
     merge::merge_all(&store, false).unwrap();
     let segments_after = store.segments().unwrap().len();
-    assert!(segments_after < segments_before, "{segments_before} -> {segments_after}");
+    assert!(
+        segments_after < segments_before,
+        "{segments_before} -> {segments_after}"
+    );
     assert_eq!(segments_after, 1);
 
     let searcher = Searcher::new(&store).unwrap();
@@ -265,7 +294,9 @@ fn merging_drops_postings_for_deleted_documents() {
     // With every posting rewritten there is nothing left to tombstone.
     let dead: i64 = store
         .conn
-        .query_row("SELECT COUNT(*) FROM docs WHERE deleted = 1", [], |r| r.get(0))
+        .query_row("SELECT COUNT(*) FROM docs WHERE deleted = 1", [], |r| {
+            r.get(0)
+        })
         .unwrap();
     assert_eq!(dead, 0);
 }
@@ -326,7 +357,13 @@ fn a_second_crawl_reindexes_nothing() {
     drop(store);
 
     let store = Store::open(c.path()).unwrap();
-    let mut indexer = Indexer::new(&store, Options { auto_merge: false, ..Default::default() });
+    let mut indexer = Indexer::new(
+        &store,
+        Options {
+            auto_merge: false,
+            ..Default::default()
+        },
+    );
     indexer.crawl().unwrap();
     indexer.finish().unwrap();
 

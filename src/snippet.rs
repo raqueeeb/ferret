@@ -23,7 +23,11 @@ pub struct Snippet {
 
 impl Snippet {
     pub fn empty() -> Snippet {
-        Snippet { text: String::new(), marks: Vec::new(), line: 0 }
+        Snippet {
+            text: String::new(),
+            marks: Vec::new(),
+            line: 0,
+        }
     }
 }
 
@@ -81,13 +85,21 @@ pub fn from_text(text: &str, terms: &[String]) -> Snippet {
 
     let line = text[..start].bytes().filter(|&b| b == b'\n').count() + 1;
     let (collapsed, marks) = collapse_whitespace(slice, &marks);
-    Snippet { text: collapsed, marks, line }
+    Snippet {
+        text: collapsed,
+        marks,
+        line,
+    }
 }
 
 fn head(text: &str) -> Snippet {
     let end = ceil_char_boundary(text, text.len().min(WINDOW));
     let (collapsed, marks) = collapse_whitespace(&text[..end], &[]);
-    Snippet { text: collapsed, marks, line: 1 }
+    Snippet {
+        text: collapsed,
+        marks,
+        line: 1,
+    }
 }
 
 /// Case-insensitive whole-token matches, with the index of the term matched.

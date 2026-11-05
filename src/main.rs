@@ -85,7 +85,11 @@ struct Args {
 }
 
 fn parse_args(args: &[String], value_flags: &[&str]) -> Args {
-    let mut out = Args { positional: Vec::new(), flags: Vec::new(), values: Vec::new() };
+    let mut out = Args {
+        positional: Vec::new(),
+        flags: Vec::new(),
+        values: Vec::new(),
+    };
     let mut i = 0;
     while i < args.len() {
         let a = &args[i];
@@ -111,7 +115,10 @@ impl Args {
         self.flags.iter().any(|f| f == name)
     }
     fn value(&self, name: &str) -> Option<&str> {
-        self.values.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())
+        self.values
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
     }
     fn num(&self, name: &str) -> Option<u64> {
         self.value(name).and_then(|v| v.parse().ok())
@@ -186,7 +193,11 @@ fn cmd_index(args: &[String]) -> Result<()> {
         "  index is {} for {} live documents — {:.1}% of the text it covers",
         human_bytes(index_bytes),
         commas(docs),
-        if s.bytes_read > 0 { index_bytes as f64 / s.bytes_read as f64 * 100.0 } else { 0.0 }
+        if s.bytes_read > 0 {
+            index_bytes as f64 / s.bytes_read as f64 * 100.0
+        } else {
+            0.0
+        }
     );
     let _ = tokens;
     println!("  {} segments after merge", store.segments()?.len());
@@ -198,7 +209,10 @@ fn cmd_search(args: &[String]) -> Result<()> {
     if args.positional.is_empty() {
         return Err("nothing to search for — try `ferret search \"postings list\"`".into());
     }
-    let root = args.value("in").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    let root = args
+        .value("in")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."));
     let query_text = args.positional.join(" ");
     let limit = args.num("n").or_else(|| args.num("limit")).unwrap_or(10) as usize;
 
@@ -263,7 +277,10 @@ fn cmd_search(args: &[String]) -> Result<()> {
 
     if args.has("plan") {
         println!();
-        println!("  {:<28} {:>9} {:>7} {:>9} {:>5}", "term", "docs", "idf", "postings", "segs");
+        println!(
+            "  {:<28} {:>9} {:>7} {:>9} {:>5}",
+            "term", "docs", "idf", "postings", "segs"
+        );
         for t in &plan.terms {
             println!(
                 "  {:<28} {:>9} {:>7.3} {:>9} {:>5}",
@@ -305,14 +322,20 @@ fn cmd_stats(args: &[String]) -> Result<()> {
     let store = Store::open_existing(&args.root())?;
     let (docs, tokens) = store.corpus_stats()?;
     let segments = store.segments()?;
-    let terms: i64 = store.conn.query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))?;
-    let distinct: i64 = store
+    let terms: i64 = store
         .conn
-        .query_row("SELECT COUNT(DISTINCT term) FROM terms", [], |r| r.get(0))?;
+        .query_row("SELECT COUNT(*) FROM terms", [], |r| r.get(0))?;
+    let distinct: i64 =
+        store
+            .conn
+            .query_row("SELECT COUNT(DISTINCT term) FROM terms", [], |r| r.get(0))?;
     let postings: i64 = segments.iter().map(|s| s.postings).sum();
-    let dead: i64 = store
-        .conn
-        .query_row("SELECT COUNT(*) FROM docs WHERE deleted = 1", [], |r| r.get(0))?;
+    let dead: i64 =
+        store
+            .conn
+            .query_row("SELECT COUNT(*) FROM docs WHERE deleted = 1", [], |r| {
+                r.get(0)
+            })?;
     let index_bytes = store.index_bytes();
 
     println!("{}", store.root.display());
@@ -337,12 +360,19 @@ fn cmd_stats(args: &[String]) -> Result<()> {
         );
     }
     if docs > 0 {
-        println!("  {:<22} {:.0} tokens", "average document", tokens as f64 / docs as f64);
+        println!(
+            "  {:<22} {:.0} tokens",
+            "average document",
+            tokens as f64 / docs as f64
+        );
     }
 
     if !segments.is_empty() {
         println!();
-        println!("  {:>4} {:>6} {:>10} {:>12} {:>12} {:>10}", "seg", "level", "docs", "terms", "postings", "bytes");
+        println!(
+            "  {:>4} {:>6} {:>10} {:>12} {:>12} {:>10}",
+            "seg", "level", "docs", "terms", "postings", "bytes"
+        );
         for s in &segments {
             println!(
                 "  {:>4} {:>6} {:>10} {:>12} {:>12} {:>10}",
@@ -384,7 +414,9 @@ fn cmd_merge(args: &[String]) -> Result<()> {
     // write-ahead log holding every page it touched doing so. Without the
     // checkpoint the index looks three times bigger than it is.
     store.conn.execute_batch("VACUUM")?;
-    store.conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")?;
+    store
+        .conn
+        .pragma_update(None, "wal_checkpoint", "TRUNCATE")?;
     println!("  index now {}", human_bytes(store.index_bytes()));
     Ok(())
 }
@@ -399,9 +431,9 @@ fn cmd_bench(args: &[String]) -> Result<()> {
     // descent, common terms exercise the postings scan. Benchmarking only one
     // of the two is how people end up reporting misleading numbers.
     let mut sample: Vec<(String, i64)> = Vec::new();
-    let mut stmt = store.conn.prepare(
-        "SELECT term, SUM(df) AS d FROM terms GROUP BY term ORDER BY d DESC LIMIT 4000",
-    )?;
+    let mut stmt = store
+        .conn
+        .prepare("SELECT term, SUM(df) AS d FROM terms GROUP BY term ORDER BY d DESC LIMIT 4000")?;
     let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
     for row in rows {
         sample.push(row?);
@@ -446,8 +478,15 @@ fn cmd_bench(args: &[String]) -> Result<()> {
         runs
     );
     println!();
-    println!("  {:<16} {:>8} {:>8} {:>8} {:>8}", "query kind", "p50", "p90", "p99", "max");
-    for (name, mut v) in [("single term", single), ("two terms", pairs), ("phrase", phrases)] {
+    println!(
+        "  {:<16} {:>8} {:>8} {:>8} {:>8}",
+        "query kind", "p50", "p90", "p99", "max"
+    );
+    for (name, mut v) in [
+        ("single term", single),
+        ("two terms", pairs),
+        ("phrase", phrases),
+    ] {
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
         println!(
             "  {:<16} {:>7.2}ms {:>7.2}ms {:>7.2}ms {:>7.2}ms",

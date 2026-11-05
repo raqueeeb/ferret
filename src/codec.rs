@@ -103,7 +103,17 @@ mod tests {
 
     #[test]
     fn varint_roundtrip() {
-        let values = [0u64, 1, 127, 128, 300, 16383, 16384, 1 << 20, u32::MAX as u64];
+        let values = [
+            0u64,
+            1,
+            127,
+            128,
+            300,
+            16383,
+            16384,
+            1 << 20,
+            u32::MAX as u64,
+        ];
         let mut buf = Vec::new();
         for v in values {
             put_varint(&mut buf, v);

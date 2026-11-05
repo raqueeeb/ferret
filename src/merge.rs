@@ -130,7 +130,11 @@ pub fn merge_segments(
     verbose: bool,
 ) -> Result<MergeStats> {
     let start = Instant::now();
-    let mut stats = MergeStats { merges: 1, segments_in: ids.len() as u64, ..Default::default() };
+    let mut stats = MergeStats {
+        merges: 1,
+        segments_in: ids.len() as u64,
+        ..Default::default()
+    };
     if ids.is_empty() {
         return Ok(MergeStats::default());
     }
@@ -240,7 +244,8 @@ fn emit(
     let peak: usize = lists.iter().map(|l| l.len()).sum();
     stats.peak_term_bytes = stats.peak_term_bytes.max(peak);
 
-    let mut readers: Vec<PostingsReader<'_>> = lists.iter().map(|b| PostingsReader::new(b)).collect();
+    let mut readers: Vec<PostingsReader<'_>> =
+        lists.iter().map(|b| PostingsReader::new(b)).collect();
     let mut heads: Vec<Option<crate::segment::Entry>> =
         readers.iter_mut().map(|r| r.next_entry()).collect();
     stats.postings_in += heads.iter().filter(|h| h.is_some()).count() as u64;

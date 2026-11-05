@@ -91,7 +91,8 @@ impl PostingsBuilder {
 
     /// Bytes a `push` would add, without performing it.
     pub fn cost(&self, doc: i64, positions: &[u32]) -> usize {
-        let mut n = varint_len((doc - self.last_doc) as u64) + varint_len(positions.len() as u64) + 1;
+        let mut n =
+            varint_len((doc - self.last_doc) as u64) + varint_len(positions.len() as u64) + 1;
         let mut prev = 0u32;
         for (i, &p) in positions.iter().enumerate() {
             n += varint_len(if i == 0 { p as u64 } else { (p - prev) as u64 });
@@ -119,7 +120,12 @@ pub struct PostingsReader<'a> {
 
 impl<'a> PostingsReader<'a> {
     pub fn new(buf: &'a [u8]) -> Self {
-        PostingsReader { buf, pos: 0, last_doc: 0, pending_positions: 0 }
+        PostingsReader {
+            buf,
+            pos: 0,
+            last_doc: 0,
+            pending_positions: 0,
+        }
     }
 
     /// Advance to the next document. Any positions left unread from the
@@ -140,7 +146,11 @@ impl<'a> PostingsReader<'a> {
         self.pos += 1;
         self.last_doc += gap as i64;
         self.pending_positions = tf;
-        Some(Entry { doc: self.last_doc, tf, norm })
+        Some(Entry {
+            doc: self.last_doc,
+            tf,
+            norm,
+        })
     }
 
     /// Walk past the current entry's positions without decoding them. Varints
@@ -164,7 +174,11 @@ impl<'a> PostingsReader<'a> {
         for i in 0..self.pending_positions {
             match get_varint(self.buf, &mut self.pos) {
                 Some(gap) => {
-                    let p = if i == 0 { gap as u32 } else { prev + gap as u32 };
+                    let p = if i == 0 {
+                        gap as u32
+                    } else {
+                        prev + gap as u32
+                    };
                     out.push(p);
                     prev = p;
                 }
@@ -200,7 +214,15 @@ pub struct SegmentWriter<'a> {
 impl<'a> SegmentWriter<'a> {
     pub fn begin(conn: &'a Connection, id: i64, level: i64) -> Result<Self> {
         conn.execute_batch("BEGIN IMMEDIATE")?;
-        Ok(SegmentWriter { conn, id, level, terms: 0, postings: 0, bytes: 0, docs: 0 })
+        Ok(SegmentWriter {
+            conn,
+            id,
+            level,
+            terms: 0,
+            postings: 0,
+            bytes: 0,
+            docs: 0,
+        })
     }
 
     pub fn add_term(&mut self, term: &str, df: u32, ttf: u64, blob: &[u8]) -> Result<()> {

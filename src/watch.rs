@@ -144,7 +144,10 @@ fn interesting(root: &Path, path: &Path) -> bool {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    if name.ends_with('~') || name.ends_with(".swp") || name.ends_with(".swx") || name.ends_with(".tmp")
+    if name.ends_with('~')
+        || name.ends_with(".swp")
+        || name.ends_with(".swx")
+        || name.ends_with(".tmp")
     {
         return false;
     }
@@ -161,7 +164,10 @@ mod tests {
     #[test]
     fn ignores_its_own_index_writes() {
         let root = Path::new("/corpus");
-        assert!(!interesting(root, Path::new("/corpus/.ferret/index.db-wal")));
+        assert!(!interesting(
+            root,
+            Path::new("/corpus/.ferret/index.db-wal")
+        ));
         assert!(!interesting(root, Path::new("/corpus/node_modules/x/a.js")));
         assert!(!interesting(root, Path::new("/corpus/notes.md.swp")));
         assert!(interesting(root, Path::new("/corpus/src/main.rs")));

@@ -25,7 +25,10 @@ const UI: &str = include_str!("ui.html");
 pub fn run(store: Store, port: u16) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", port))
         .map_err(|e| format!("cannot bind 127.0.0.1:{port}: {e}"))?;
-    println!("ferret serving http://127.0.0.1:{port}  (index: {})", store.root.display());
+    println!(
+        "ferret serving http://127.0.0.1:{port}  (index: {})",
+        store.root.display()
+    );
 
     // One connection behind a mutex. SQLite connections are `Send` but not
     // `Sync`, and serialising queries is correct here anyway: the index is
