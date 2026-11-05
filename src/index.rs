@@ -30,10 +30,35 @@ use crate::Result;
 /// internals. Each is skipped without being descended into, which on a real
 /// checkout is the difference between 3,000 files and 300,000.
 pub const SKIP_DIRS: &[&str] = &[
-    ".ferret", ".git", ".hg", ".svn", ".bzr", "node_modules", "target", "build", "dist",
-    "__pycache__", ".venv", "venv", ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache",
-    ".gradle", ".idea", ".vscode", ".next", ".nuxt", ".cache", ".terraform", "Pods",
-    "DerivedData", ".stack-work", "_build", "coverage", ".sass-cache",
+    ".ferret",
+    ".git",
+    ".hg",
+    ".svn",
+    ".bzr",
+    "node_modules",
+    "target",
+    "build",
+    "dist",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".gradle",
+    ".idea",
+    ".vscode",
+    ".next",
+    ".nuxt",
+    ".cache",
+    ".terraform",
+    "Pods",
+    "DerivedData",
+    ".stack-work",
+    "_build",
+    "coverage",
+    ".sass-cache",
 ];
 
 pub struct Options {
@@ -88,7 +113,12 @@ pub struct Indexer<'a> {
 
 impl<'a> Indexer<'a> {
     pub fn new(store: &'a Store, opts: Options) -> Self {
-        Indexer { store, mem: MemTable::new(opts.budget), stats: Stats::default(), opts }
+        Indexer {
+            store,
+            mem: MemTable::new(opts.budget),
+            stats: Stats::default(),
+            opts,
+        }
     }
 
     /// Full crawl of the index root: adds new files, re-indexes changed ones,
@@ -134,7 +164,7 @@ impl<'a> Indexer<'a> {
             }
             self.stats.seen += 1;
             let rel = match entry.path().strip_prefix(&root) {
-                Ok(r) => r.to_string_lossy().into_owned(),
+                Ok(r) => doc_key(r),
                 Err(_) => continue,
             };
             present.insert(rel.clone());
@@ -216,7 +246,10 @@ impl<'a> Indexer<'a> {
                     match extract::extract_file(path) {
                         Ok(Some(text)) => {
                             let mtime = mtime_of(&meta);
-                            if tx.send((path.clone(), text, mtime, meta.len() as i64)).is_err() {
+                            if tx
+                                .send((path.clone(), text, mtime, meta.len() as i64))
+                                .is_err()
+                            {
                                 break;
                             }
                         }
@@ -234,8 +267,8 @@ impl<'a> Indexer<'a> {
         let mut in_txn = 0usize;
         for (path, text, mtime, size) in rx {
             let rel = match path.strip_prefix(&root) {
-                Ok(r) => r.to_string_lossy().into_owned(),
-                Err(_) => path.to_string_lossy().into_owned(),
+                Ok(r) => doc_key(r),
+                Err(_) => doc_key(&path),
             };
             // Re-indexing is tombstone-then-insert, never update in place.
             // The old postings stay in their segments until a merge drops
@@ -245,9 +278,10 @@ impl<'a> Indexer<'a> {
             }
             let doc_id = self.store.insert_doc(&rel, mtime, size, 0)?;
             let len = self.mem.add_document(doc_id, &text);
-            self.store
-                .conn
-                .execute("UPDATE docs SET len = ?1 WHERE id = ?2", (len as i64, doc_id))?;
+            self.store.conn.execute(
+                "UPDATE docs SET len = ?1 WHERE id = ?2",
+                (len as i64, doc_id),
+            )?;
             self.store.bump_corpus(1, len as i64)?;
 
             self.stats.indexed += 1;
@@ -301,17 +335,18 @@ impl<'a> Indexer<'a> {
         };
         let rel = path
             .strip_prefix(&self.store.root)
-            .map(|r| r.to_string_lossy().into_owned())
-            .unwrap_or_else(|_| path.to_string_lossy().into_owned());
+            .map(doc_key)
+            .unwrap_or_else(|_| doc_key(path));
 
         self.store.tombstone(&rel)?;
         let doc_id = self
             .store
             .insert_doc(&rel, mtime_of(&meta), meta.len() as i64, 0)?;
         let len = self.mem.add_document(doc_id, &text);
-        self.store
-            .conn
-            .execute("UPDATE docs SET len = ?1 WHERE id = ?2", (len as i64, doc_id))?;
+        self.store.conn.execute(
+            "UPDATE docs SET len = ?1 WHERE id = ?2",
+            (len as i64, doc_id),
+        )?;
         self.store.bump_corpus(1, len as i64)?;
         self.stats.indexed += 1;
         self.stats.tokens += len as u64;
@@ -321,8 +356,8 @@ impl<'a> Indexer<'a> {
     pub fn remove_one(&mut self, path: &Path) -> Result<bool> {
         let rel = path
             .strip_prefix(&self.store.root)
-            .map(|r| r.to_string_lossy().into_owned())
-            .unwrap_or_else(|_| path.to_string_lossy().into_owned());
+            .map(doc_key)
+            .unwrap_or_else(|_| doc_key(path));
         let removed = self.store.tombstone(&rel)?.is_some();
         if removed {
             self.stats.removed += 1;
@@ -383,10 +418,60 @@ fn keep_entry(e: &walkdir::DirEntry, hidden: bool, extra: &[String]) -> bool {
     true
 }
 
+/// The key a document is stored under: its path relative to the index root,
+/// separated by `/` on every platform.
+///
+/// Windows hands back `src\main.rs` where Linux gives `src/main.rs`. Storing
+/// the native spelling makes an index unusable once it is copied between
+/// machines, and it breaks `path:` filters, which are written with forward
+/// slashes whatever the host is. Normalising where paths enter the index
+/// keeps one spelling in the database.
+///
+/// The replacement is conditional because a backslash is a legal character in
+/// a Unix filename: rewriting it there would corrupt a path rather than
+/// normalise it.
+fn doc_key(relative: &Path) -> String {
+    let text = relative.to_string_lossy().into_owned();
+    if std::path::MAIN_SEPARATOR == '/' {
+        text
+    } else {
+        text.replace(std::path::MAIN_SEPARATOR, "/")
+    }
+}
+
 fn mtime_of(meta: &std::fs::Metadata) -> i64 {
     meta.modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn document_keys_use_forward_slashes_on_every_platform() {
+        // The index is queried with `path:src/extract`, written the same way
+        // whatever the host, so the stored key has to match that spelling.
+        let key = doc_key(&PathBuf::from("src").join("extract").join("pdf.rs"));
+        assert_eq!(key, "src/extract/pdf.rs");
+        assert!(!key.contains('\\'));
+    }
+
+    #[test]
+    fn a_path_already_using_forward_slashes_is_unchanged() {
+        assert_eq!(doc_key(Path::new("docs/notes.md")), "docs/notes.md");
+        assert_eq!(doc_key(Path::new("README.md")), "README.md");
+        assert_eq!(doc_key(Path::new("")), "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_backslash_in_a_unix_filename_survives() {
+        // On Unix a backslash is an ordinary character in a filename, so
+        // rewriting it would corrupt the path rather than normalise it.
+        assert_eq!(doc_key(Path::new(r"weird\name.txt")), r"weird\name.txt");
+    }
 }
